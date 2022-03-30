@@ -196,3 +196,4 @@ function checkFile(path) {
 }
 
 exports.writeFilesPromise = writeFilesPromise;
+exports.getPostPath = getPostPath;

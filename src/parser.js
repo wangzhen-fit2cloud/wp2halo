@@ -21,8 +21,12 @@ async function parseFilePromise(config) {
 	if (config.saveAttachedImages) {
 		images.push(...collectAttachedImages(data));
 	}
+	const attachedImagesGuid = [];
+	images.forEach(attachedImage => {
+		attachedImagesGuid.push(attachedImage['guid']);
+	});
 	if (config.saveScrapedImages) {
-		images.push(...collectScrapedImages(data, postTypes));
+		images.push(...collectScrapedImages(data, postTypes, attachedImagesGuid));
 	}
 
 	mergeImagesIntoPosts(images, posts);
@@ -46,6 +50,27 @@ function getPostTypes(data, config) {
 
 function getItemsOfType(data, type) {
 	return data.rss.channel[0].item.filter(item => item.post_type[0] === type);
+}
+
+async function readContent(config) {
+	const content = await fs.promises.readFile(config.input, 'utf8');
+	const data = await xml2js.parseStringPromise(content, {
+		trim: true,
+		tagNameProcessors: [xml2js.processors.stripPrefix]
+	});
+	return data
+}
+
+async function getAllTags(config) {
+	const data = await readContent(config);
+	const tags = data.rss.channel[0].term.filter(item => item.term_taxonomy[0] === 'post_tag')
+	return tags;
+}
+
+async function getAllCategories(config) {
+	const data = await readContent(config);
+	const categories = data.rss.channel[0].term.filter(item => item.term_taxonomy[0] === 'category')
+	return categories;
 }
 
 function collectPosts(data, postTypes, config) {
@@ -84,6 +109,7 @@ function collectPosts(data, postTypes, config) {
 	if (postTypes.length === 1) {
 		console.log(allPosts.length + ' posts found.');
 	}
+	// return allPosts.splice(0, 1);
 	return allPosts;
 }
 
@@ -147,14 +173,15 @@ function collectAttachedImages(data) {
 		.map(attachment => ({
 			id: attachment.post_id[0],
 			postId: attachment.post_parent[0],
-			url: attachment.attachment_url[0]
+			url: attachment.attachment_url[0],
+			guid: attachment.guid[0]['_']
 		}));
 
 	console.log(images.length + ' attached images found.');
 	return images;
 }
 
-function collectScrapedImages(data, postTypes) {
+function collectScrapedImages(data, postTypes, attachedImagesGuid) {
 	const images = [];
 	postTypes.forEach(postType => {
 		getItemsOfType(data, postType).forEach(post => {
@@ -162,15 +189,18 @@ function collectScrapedImages(data, postTypes) {
 			const postContent = post.encoded[0];
 			const postLink = post.link[0];
 
-			const matches = [...postContent.matchAll(/<img[^>]*src="(.+?\.(?:gif|jpe?g|png))"[^>]*>/gi)];
+			// const matches = [...postContent.matchAll(/<img[^>]*src="(.+?\.(?:gif|jpe?g|png))"[^>]*>/gi)];
+			const matches = [...postContent.matchAll(/<\!--\s*wp:image\s*-->[^]*?src="(.+?)"[^]*?<\!--\s*\/wp:image\s*-->/gi)];
 			matches.forEach(match => {
 				// base the matched image URL relative to the post URL
-				const url = new URL(match[1], postLink).href;
-				images.push({
-					id: -1,
-					postId: postId,
-					url
-				});
+				const url = decodeURI(new URL(match[1], postLink).href);
+				if (!attachedImagesGuid.includes(url)) {
+					images.push({
+						id: -1,
+						postId: postId,
+						url
+					});
+				}
 			});
 		});
 	});
@@ -187,6 +217,11 @@ function mergeImagesIntoPosts(images, posts) {
 			// this image was uploaded as an attachment to this post
 			if (image.postId === post.meta.id) {
 				shouldAttach = true;
+				// 根据 wp-image-id 信息替换为实际图片名称
+				var imageName = shared.getFilenameFromUrl(image.url);
+				var reg = new RegExp('wp-image-' + image.id, "gi");
+				post.content = post.content.replace(reg, imageName);
+
 			}
 
 			// this image was set as the featured image for this post
@@ -202,4 +237,6 @@ function mergeImagesIntoPosts(images, posts) {
 	});
 }
 
+exports.getAllTags = getAllTags;
+exports.getAllCategories = getAllCategories;
 exports.parseFilePromise = parseFilePromise;

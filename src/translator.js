@@ -64,10 +64,14 @@ function getPostContent(post, turndownService, config) {
 	// without mucking up content inside of other elemnts (like <code> blocks)
 	content = content.replace(/(\r?\n){2}/g, '\n<div></div>\n');
 
+	// set images with `wp:image id` attibute to a relative path
+	// wordpress 通过 image id 获取正确的图片，会出现通过 src 地址不能正常下载图片的情况，在这个环节先将图片名称替换为 wp-image-id，后续过程中根据 id 查找到对应附件图片进行名称替换
+	content = content.replace(/(<\!--\s*wp:image\s*{"id":(\d+).*?-->[^]*?<img[^>]*src=").*?([^/"]+\.(?:gif|jpe?g|png))("[^>]*>)/gi, '$1images/wp-image-$2$4');
+
 	if (config.saveScrapedImages) {
 		// writeImageFile() will save all content images to a relative /images
 		// folder so update references in post content to match
-		content = content.replace(/(<img[^>]*src=").*?([^/"]+\.(?:gif|jpe?g|png))("[^>]*>)/gi, '$1images/$2$3');
+		content = content.replace(/(<\!--\s*wp:image\s*-->[^]*?<img[^>]*src=").*?([^/"]+\.(?:gif|jpe?g|png))("[^>]*>)/gi, '$1images/$2$3');
 	}
 
 	// this is a hack to make <iframe> nodes non-empty by inserting a "." which
