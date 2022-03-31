@@ -61,14 +61,14 @@ async function import2halo(posts, config) {
                 });
         }
 
-        let postId = -1;
-        let postTitle = "";
+        let haloPost = Object;
         // 通过文章导入接口导入markdown文章
         await haloAdminClient.backup.importMarkdown(postRS)
             .then(res => {
                 console.log("== HALO ==: import " + res.data.title + " succeed", res.message);
-                postId = res.data.id;
-                postTitle = res.data.title;
+                haloPost = res.data;
+                haloPost.content = post.content;
+                haloPost.thumbnail = post.frontmatter.coverImage;
                 successCount = successCount + 1;
             })
             .catch(e => {
@@ -76,12 +76,13 @@ async function import2halo(posts, config) {
                 failCount = failCount + 1;
             });
         // 使用替换过图片地址后的内容更新已导入的文章
-        await haloAdminClient.post.update(postId, { originalContent: post.content, title: postTitle, thumbnail: post.frontmatter.coverImage })
+
+        await haloAdminClient.post.update(haloPost.id, haloPost)
             .then(res => {
-                console.log("== HALO ==:", chalk.green('[OK]'), " update " + postId + " succeed", res.message);
+                console.log("== HALO ==:", chalk.green('[OK]'), " update " + haloPost.id + " succeed", res.message);
             })
             .catch(e => {
-                console.log("== HALO ==:", chalk.red('[ERROR]'), " update failed\n----------\n", e, '\n----------\n', post.meta);
+                console.log("== HALO ==:", chalk.red('[ERROR]'), " update " + haloPost.id + " failed\n----------\n", e, '\n----------\n', post.meta);
             });
 
     }
@@ -95,7 +96,6 @@ async function import2halo(posts, config) {
                     const haloCategoryParent = haloCategories.find(item => item.slug === decodeURI(wpCategory.term_parent));
                     haloCategory.parentId = !(haloCategoryParent === undefined) ? haloCategoryParent.id : 0;
                     haloCategory.name = wpCategory.term_name[0];
-                    console.log("xxx");
                 }
             })
             await haloAdminClient.category.updateInBatch(haloCategories)
