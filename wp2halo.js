@@ -39,26 +39,29 @@ async function import2halo(posts, config) {
             console.log(chalk.blue('[SKIP]'), 'post of this title already exist');
             continue;
         }
-        var postPath = writer.getPostPath(post, config);
-        var postRS = fs.createReadStream(postPath);
-        var images = fs.readdirSync(postPath + "/../images");
-
-        // 替换文章内容中的图片地址为图片上传后的实际地址
-        for (const image of images) {
-            var imagesRs = fs.createReadStream(postPath + "/../images/" + image);
-            await haloAdminClient.attachment.upload(imagesRs)
-                .then(res => {
-                    var uploadedImagePath = res.data.path;
-                    var contentReg = new RegExp('(\\!\\[.*?\\]\\()(images\\/' + image + ')(\\))', "gi");
-                    if (image === post.frontmatter.coverImage) {
-                        post.frontmatter.coverImage = uploadedImagePath;
-                    }
-                    post.content = post.content.replace(contentReg, "$1" + uploadedImagePath + "$3");
-                    console.log("== HALO ==:", chalk.green('[OK]'), "upload image " + uploadedImagePath + " success", res.message);
-                })
-                .catch(e => {
-                    console.log("== HALO ==:", chalk.red('[ERROR]'), " upload images failed\n----------\n", e, '\n---------\n');
-                });
+        let postPath = writer.getPostPath(post, config);
+        let postRS = fs.createReadStream(postPath);
+        try {
+            let images = fs.readdirSync(postPath + "/../images");
+            // 替换文章内容中的图片地址为图片上传后的实际地址
+            for (const image of images) {
+                let imagesRs = fs.createReadStream(postPath + "/../images/" + image);
+                await haloAdminClient.attachment.upload(imagesRs)
+                    .then(res => {
+                        let uploadedImagePath = res.data.path;
+                        let contentReg = new RegExp('(\\!\\[.*?\\]\\()(images\\/' + image + ')(\\))', "gi");
+                        if (image === post.frontmatter.coverImage) {
+                            post.frontmatter.coverImage = uploadedImagePath;
+                        }
+                        post.content = post.content.replace(contentReg, "$1" + uploadedImagePath + "$3");
+                        console.log("== HALO ==:", chalk.green('[OK]'), "upload image " + uploadedImagePath + " success", res.message);
+                    })
+                    .catch(e => {
+                        console.log("== HALO ==:", chalk.red('[ERROR]'), " upload images failed\n----------\n", e, '\n---------\n');
+                    });
+            }
+        } catch (error) {
+            console.log(chalk.blue('[SKIP]'), 'image dir of this post not exist');
         }
 
         let haloPost = Object;
@@ -68,7 +71,7 @@ async function import2halo(posts, config) {
                 console.log("== HALO ==: import " + res.data.title + " succeed", res.message);
                 haloPost = res.data;
                 haloPost.content = post.content;
-                haloPost.thumbnail = post.frontmatter.coverImage;
+                haloPost.thumbnail = post.frontmatter.coverImage === undefined ? '' : post.frontmatter.coverImage;
                 successCount = successCount + 1;
             })
             .catch(e => {
@@ -107,7 +110,7 @@ async function import2halo(posts, config) {
         });
 }
 
-(async () => {
+(async() => {
     // Node version check
     const requiredVersion = '12.14.0';
     const currentVersion = process.versions.node;
@@ -147,6 +150,3 @@ async function import2halo(posts, config) {
     console.log('\nSomething went wrong, execution halted early.');
     console.error(ex);
 });
-
-
-
